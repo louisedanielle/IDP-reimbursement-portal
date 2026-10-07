@@ -83,7 +83,6 @@ services:
   - type: web
     name: reimbursement-frontend
     runtime: static
-    plan: free
     rootDir: frontend
     buildCommand: "npm install && npm run build"
     staticPublishPath: build
