@@ -11,7 +11,7 @@ services:
     plan: free
     region: oregon
     ipAllowList: []
-    
+
   - type: web
     name: reimbursement-api
     runtime: python
@@ -84,7 +84,6 @@ services:
     name: reimbursement-frontend
     runtime: static
     plan: free
-    region: oregon
     rootDir: frontend
     buildCommand: "npm install && npm run build"
     staticPublishPath: build
