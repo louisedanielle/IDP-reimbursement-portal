@@ -1,6 +1,6 @@
 from sqlalchemy import (
     Column, Integer, String, Float, DateTime, ForeignKey, JSON,
-    Text, Boolean, Uuid, LargeBinary,   
+    Text, Boolean, Uuid, LargeBinary,
 )
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -11,20 +11,19 @@ from .database import Base
 
 # ============ LOOKUP TABLES ============
 
-class Document(Base):
-    __tablename__ = "documents"
+class Company(Base):
+    __tablename__ = "companies"
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
-    filename = Column(String(255), nullable=False)
-    file_path = Column(String(500), nullable=True)    
-    file_data = Column(LargeBinary, nullable=True)    
-    file_size = Column(Integer)
-    mime_type = Column(String(100))
-    upload_date = Column(DateTime, default=datetime.utcnow)
-    status = Column(String(50), default="pending")
-    error_message = Column(Text, nullable=True)
+    name = Column(String(200), unique=True, nullable=False)
+    short_name = Column(String(20), unique=True, nullable=True)
+    address = Column(String(500), nullable=True)
+    phone = Column(String(100), nullable=True)
+    fax = Column(String(100), nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_date = Column(DateTime, default=datetime.utcnow)
 
-    extracted_data = relationship("ExtractedData", back_populates="document", uselist=False)
+    categories = relationship("PaymentCategory", back_populates="company")
 
 
 class PaymentType(Base):
@@ -43,7 +42,7 @@ class PaymentCategory(Base):
     company_id = Column(Uuid, ForeignKey("companies.id"), nullable=False)
     payment_type_id = Column(Uuid, ForeignKey("payment_types.id"), nullable=False)
     name = Column(String(100), nullable=False)
-    frequency = Column(String(20), nullable=False)   # "monthly" | "annual" | "adhoc"
+    frequency = Column(String(20), nullable=False)
     is_active = Column(Boolean, default=True)
 
     company = relationship("Company", back_populates="categories")
@@ -55,7 +54,7 @@ class Payee(Base):
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     name = Column(String(200), unique=True, nullable=False)
-    payee_type = Column(String(50), default="staff")   # "staff" | "vendor" | "other"
+    payee_type = Column(String(50), default="staff")
     email = Column(String(200), nullable=True)
     is_active = Column(Boolean, default=True)
     created_date = Column(DateTime, default=datetime.utcnow)
@@ -68,7 +67,8 @@ class Document(Base):
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     filename = Column(String(255), nullable=False)
-    file_path = Column(String(500), nullable=False)
+    file_path = Column(String(500), nullable=True)
+    file_data = Column(LargeBinary, nullable=True)
     file_size = Column(Integer)
     mime_type = Column(String(100))
     upload_date = Column(DateTime, default=datetime.utcnow)
@@ -95,13 +95,6 @@ class ExtractedData(Base):
 
 
 class Requisition(Base):
-    """
-    A Payment Requisition (PR).
-
-    One PR = one (company, category, payee, period).
-    For reimbursements, period is a month (YYYY-MM) and all line items
-    for that payee + month roll up into this single PR.
-    """
     __tablename__ = "requisitions"
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -113,7 +106,6 @@ class Requisition(Base):
     )
     payee_id = Column(Uuid, ForeignKey("payees.id"), nullable=True)
 
-    # Denormalized names for fast display without joins
     company_name = Column(String(200), nullable=True)
     category_name = Column(String(100), nullable=True)
     payment_type_name = Column(String(50), nullable=True)
@@ -122,12 +114,12 @@ class Requisition(Base):
     applicant = Column(String(100), default="Juliana")
     nature = Column(String(50), default="Payment Requisition")
 
-    period = Column(String(20), nullable=True)         # "2026-06" | "2026" | "2026-06-15"
-    frequency = Column(String(20), nullable=True)      # "monthly" | "annual" | "adhoc"
+    period = Column(String(20), nullable=True)
+    frequency = Column(String(20), nullable=True)
 
     total_amount = Column(Float, nullable=False, default=0.0)
     currency = Column(String(10), default="HKD")
-    status = Column(String(50), default="draft")       # draft | approved | paid
+    status = Column(String(50), default="draft")
 
     created_date = Column(DateTime, default=datetime.utcnow)
     submitted_date = Column(DateTime, nullable=True)
@@ -141,12 +133,6 @@ class Requisition(Base):
 
 
 class LineItem(Base):
-    """
-    A single expense or payment line inside a PR.
-    For reimbursements, `category` is the reimbursement category
-    (Hotel, Transportation, Drinks & Meals With Clients, etc.).
-    For other payment types, `category` is usually null.
-    """
     __tablename__ = "line_items"
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -157,16 +143,13 @@ class LineItem(Base):
         Uuid, ForeignKey("documents.id"), nullable=True
     )
 
-    item_number = Column(Integer, nullable=False)   # 1, 2, 3... within the PR
+    item_number = Column(Integer, nullable=False)
 
     date = Column(DateTime, nullable=True)
     description = Column(Text, nullable=False)
     amount_hkd = Column(Float, nullable=False)
 
-    # Reimbursement category (Hotel, Transportation, etc.)
     category = Column(String(100), nullable=True)
-
-    # Free-form extra fields (e.g. MPF employer/employee split)
     meta = Column(JSON, nullable=True)
 
     requisition = relationship("Requisition", back_populates="line_items")
