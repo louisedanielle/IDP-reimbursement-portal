@@ -1,14 +1,14 @@
-# backend/app/workers/processor.py
 import asyncio
-import os   
+import os
 from uuid import UUID
-from celery import Celery
 from datetime import datetime
+
+from celery import Celery
 
 from ..config import settings
 from ..database import SessionLocal
 from ..models import Document, ExtractedData
-from ..services.mistral_service import MistralService
+from ..services.grok_service import GrokService
 
 
 app = Celery(
@@ -29,7 +29,7 @@ app.conf.update(
     broker_connection_retry_on_startup=True,
 )
 
-mistral_service = MistralService()
+grok_service = GrokService()
 
 
 @app.task(
@@ -39,6 +39,7 @@ mistral_service = MistralService()
     retry_kwargs={'max_retries': 2, 'countdown': 5},
 )
 def process_document(self, document_id: str):
+    """Extract line items from an uploaded document using Grok."""
     db = SessionLocal()
     document = None
     tmp_path = None
@@ -57,7 +58,7 @@ def process_document(self, document_id: str):
         db.commit()
         print(f"🔄 Processing: {document.filename}")
 
-        # Write the file bytes to a temp file on the worker's own disk
+        # --- Write file bytes to a temp file on the worker's disk ---
         if document.file_data:
             import tempfile
             suffix = os.path.splitext(document.filename)[1] or ".jpg"
@@ -74,11 +75,12 @@ def process_document(self, document_id: str):
             db.commit()
             return {"status": "failed", "message": "No file data"}
 
+        # --- Extract with Grok ---
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
             result = loop.run_until_complete(
-                mistral_service.extract_receipt_data(tmp_path)
+                grok_service.extract_receipt_data(tmp_path)
             )
         finally:
             loop.close()
@@ -93,6 +95,7 @@ def process_document(self, document_id: str):
             f"type: {document_type} | total: {total_amount}"
         )
 
+        # --- Save extracted data ---
         extracted = ExtractedData(
             document_id=document.id,
             raw_text=result.get("raw_text", ""),
@@ -124,5 +127,12 @@ def process_document(self, document_id: str):
             document.error_message = str(e)
             db.commit()
         return {"status": "failed", "message": str(e)}
+
     finally:
+        # Clean up the temp file
+        if tmp_path and document and tmp_path != getattr(document, "file_path", None):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
         db.close()

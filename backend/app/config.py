@@ -20,9 +20,8 @@ class Settings(BaseSettings):
     OUTPUT_DIR: str = os.getenv("OUTPUT_DIR", "./outputs")
     USE_GCS: bool = os.getenv("USE_GCS", "False").lower() == "true"
 
-    # Mistral AI
-    MISTRAL_API_KEY: str = os.getenv("MISTRAL_API_KEY", "")
-    MISTRAL_VISION_MODEL: str = os.getenv("MISTRAL_VISION_MODEL", "pixtral-12b-2409")
+    XAI_API_KEY: str = os.getenv("XAI_API_KEY", "")
+    XAI_VISION_MODEL: str = os.getenv("XAI_VISION_MODEL", "grok-4.7")
 
     # Redis
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
