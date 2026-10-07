@@ -1,5 +1,6 @@
 # backend/app/workers/processor.py
 import asyncio
+import os   
 from uuid import UUID
 from celery import Celery
 from datetime import datetime
