@@ -4,32 +4,85 @@ import re
 from typing import List, Dict, Any
 from datetime import datetime
 
-from openai import OpenAI
+from mistralai import Mistral
 
 from ..config import settings
 
 
+# ============================================================
+# Reimbursement categories — from the official Leapstack list
+# ============================================================
 EXPENSE_CATEGORIES = [
-    {"name": "Drinks & Meals With Clients",
-     "description": "Food and beverages bought during work trips or business meetings."},
-    {"name": "Entertainment",
-     "description": "Gift to Client, leisure and entertainment activities with clients."},
-    {"name": "Hotel",
-     "description": "Hotel for Business Trip."},
-    {"name": "Office Equipment & Supplies",
-     "description": "Pens, paper, cables, shredder, chairs, computers, office furniture."},
-    {"name": "Research and Development Expenses",
-     "description": "AI / GPT API Fee."},
-    {"name": "Sundry Expenses",
-     "description": "Small office items, keys, plants, cleaning supplies, water deposit."},
-    {"name": "Transportation",
-     "description": "MTR, Octopus, Taxi, Uber, Air Ticket, High-speed rail (HSR)."},
-    {"name": "Travel Expenses",
-     "description": "Visa fees, passport renewal, international vaccination certificates."},
+    {
+        "name": "Drinks & Meals With Clients",
+        "description": (
+            "Food and beverages bought during work trips or business meetings."
+        ),
+    },
+    {
+        "name": "Entertainment",
+        "description": (
+            "Gift to Client, leisure and entertainment activities undertaken "
+            "with clients, with the aim of establishing or maintaining business "
+            "relationships."
+        ),
+    },
+    {
+        "name": "Hotel",
+        "description": "Hotel for Business Trip.",
+    },
+    {
+        "name": "Office Equipment & Supplies",
+        "description": (
+            "Writing and desktop tools (pens, highlighters, scissors, staplers, "
+            "tape, sticky notes); paper and printing supplies (A4, notebooks, "
+            "envelopes, labels, toner, ink); document management (folders, "
+            "file dividers, hole punch); computer peripherals (mouse, keyboard, "
+            "USB drive, extension cable, network cable); small appliances (paper "
+            "shredder, label maker, cleaning machine, desktop fan); technology "
+            "and electronics (computers, laptops, servers, photocopiers, "
+            "projectors, company smartphones); office furniture (desks, chairs, "
+            "conference tables, filing cabinets, sofas)."
+        ),
+    },
+    {
+        "name": "Research and Development Expenses",
+        "description": "AI / GPT API Fee.",
+    },
+    {
+        "name": "Sundry Expenses",
+        "description": (
+            "Office incidentals such as keys and locks (making keys, changing "
+            "locks, locker padlocks); small cleaning supplies (rags, garbage "
+            "bags, pesticides) not covered by regular cleaning contracts; "
+            "decorations and greenery (potted plants, temporary holiday "
+            "decorations); water dispenser bucket deposit."
+        ),
+    },
+    {
+        "name": "Transportation",
+        "description": (
+            "MTR, Octopus, Taxi, Uber, Air Ticket, High-speed rail (HSR)."
+        ),
+    },
+    {
+        "name": "Travel Expenses",
+        "description": (
+            "Necessary expenses incurred to facilitate business operations in "
+            "a different location: visa fees for the destination country, "
+            "passport application/renewal fees, international vaccination "
+            "certificate fees."
+        ),
+    },
 ]
 
 
 class MistralService:
+    """
+    Extracts structured expense data from receipt images using Mistral's
+    multimodal vision model.
+    """
+
     def __init__(self):
         self.client = Mistral(api_key=settings.MISTRAL_API_KEY)
         self.vision_model = settings.MISTRAL_VISION_MODEL
@@ -54,11 +107,14 @@ class MistralService:
                 "error": str(e),
             }
 
-    async def _extract_with_vision(self, image_base64, mime_type):
-        category_lines = "\n".join(
-            f"{i}. {c['name']} — {c['description']}"
-            for i, c in enumerate(self.categories, 1)
-        )
+    async def _extract_with_vision(
+        self, image_base64: str, mime_type: str
+    ) -> Dict[str, Any]:
+        category_lines = []
+        for i, c in enumerate(self.categories, 1):
+            category_lines.append(f"{i}. {c['name']} — {c['description']}")
+        category_list = "\n".join(category_lines)
+
         category_names = ", ".join(f'"{c["name"]}"' for c in self.categories)
 
         system_prompt = f"""You are a financial document extraction assistant.
@@ -71,47 +127,49 @@ CRITICAL RULES:
    return null.
 
 2. RAW TEXT — return the full text you see on the document as a single
-   string, preserving line breaks.
+   string, preserving line breaks. Transcribe labels and values.
 
-3. PAYEE NAME — the person or ORGANIZATION the payment is FOR. This is
-   usually the MERCHANT or VENDOR, not a contact person or employee.
+3. PAYEE NAME — the person or ORGANIZATION the payment is FOR.
    Priority:
      a) The company the bill/invoice is issued BY
+        (e.g. "CLP Power", "AIA International Ltd", "HSBC")
      b) The merchant name on a receipt
      c) The employee (for reimbursements, MPF, or salary)
    Return the name EXACTLY as printed. If none is visible, return null.
 
-4. TRANSACTION DATE — the date the transaction occurred. Format: "YYYY-MM-DD".
+4. TRANSACTION DATE — the date the transaction ACTUALLY occurred.
+   Format: "YYYY-MM-DD". If a range is shown, use the start date.
 
-5. TOTAL AMOUNT — very important. Look for a line that says one of:
-   - "Total", "Total Amount", "Total Amount Due", "Grand Total",
-     "Amount Due", "Amount Payable", "Balance Due", "Net Amount",
-     "Amount to Pay", "Pay This Amount"
-   - Chinese: 總額, 总额, 合計, 合计, 應付, 应付, 金額, 金额
+5. TOTAL AMOUNT — look for a line that says one of:
+   "Total", "Total Amount", "Total Amount Due", "Grand Total",
+   "Amount Due", "Amount Payable", "Balance Due", "Net Amount",
+   "Amount to Pay", "Pay This Amount"
+   Chinese: 總額, 总额, 合計, 合计, 應付, 应付, 金額, 金额
    Extract that line's amount as "total_amount" (a number in HKD).
+   If no total line exists, set "total_amount" to null.
 
-   If the document has NO explicit total line, set "total_amount" to null.
+6. LINE ITEMS — extract EVERY financial line from the document,
+   INCLUDING the total line. Mark each item with:
+   - "is_total": true only if that line is the total/amount-due row
+   - "is_total": false otherwise
 
-6. LINE ITEMS — extract EVERY financial line from the document, INCLUDING
-   the total line. For each item, set "is_total" to true if that specific
-   line is the total/amount-due row, otherwise false.
-
-   This lets downstream code sum the breakdown separately from the total.
-
-7. AMOUNT — for each line item, use the amount printed (in HKD; convert
-   if needed).
+7. AMOUNT — for each line item, use the amount printed (in HKD;
+   convert if needed).
 
 8. DESCRIPTION — clear English description under 200 chars.
 
-9. CATEGORY — pick ONE (for reimbursements only):
-{category_lines}
+9. CATEGORY — pick EXACTLY ONE from this list (for reimbursements only):
+
+{category_list}
+
+   If nothing clearly fits, use null.
 
 10. LANGUAGE — documents may be English, Chinese, or mixed.
 
 11. DOCUMENT TYPE — one of: bill, receipt, mpf, cheque, invoice,
     salary, insurance, other.
 
-OUTPUT — return ONLY valid JSON:
+OUTPUT — return ONLY valid JSON matching this schema:
 {{
   "raw_text": "the full text read from the document",
   "payee_name": "the merchant/vendor/payee name, or null",
@@ -128,14 +186,9 @@ OUTPUT — return ONLY valid JSON:
   ]
 }}"""
 
-        user_prompt = """Read this document and return:
-1. raw_text — the full text you see
-2. payee_name — the merchant/vendor/payee the payment is FOR
-3. document_type — bill, receipt, mpf, cheque, invoice, salary, insurance, or other
-4. total_amount — the amount on the "Total" / "Amount Due" line, or null
-5. items — every financial line, each marked with is_total: true if it's the total row
-
-Return JSON only."""
+        user_prompt = """Read this document and return the JSON described above.
+Use the transaction date printed on the document (not today's date). Return
+JSON only."""
 
         try:
             response = self.client.chat.complete(
@@ -213,6 +266,8 @@ Return JSON only."""
                 "total_amount": None, "items": [], "confidence": 0.0,
             }
 
+    # ---------------- helpers ----------------
+
     def _normalize_category(self, value):
         if not value or not isinstance(value, str):
             return None
@@ -225,10 +280,13 @@ Return JSON only."""
     def _normalize_date(self, value):
         if not value or not isinstance(value, str):
             return ""
+
         s = value.strip()
+
         iso = re.match(r"^(\d{4})-(\d{2})-(\d{2})", s)
         if iso:
             return f"{iso.group(1)}-{iso.group(2)}-{iso.group(3)}"
+
         for fmt in (
             "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d", "%Y.%m.%d",
             "%d %b %Y", "%d %B %Y", "%b %d, %Y", "%B %d, %Y",
@@ -237,10 +295,12 @@ Return JSON only."""
                 return datetime.strptime(s, fmt).strftime("%Y-%m-%d")
             except ValueError:
                 continue
+
         frag = re.search(r"(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})", s)
         if frag:
             y, m, d = frag.groups()
             return f"{y}-{int(m):02d}-{int(d):02d}"
+
         return s
 
     def _normalize_amount(self, value):
@@ -254,7 +314,7 @@ Return JSON only."""
         except (ValueError, TypeError):
             return 0.0
 
-    def _get_mime_type(self, file_path):
+    def _get_mime_type(self, file_path: str) -> str:
         ext = file_path.lower().split(".")[-1]
         return {
             "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",

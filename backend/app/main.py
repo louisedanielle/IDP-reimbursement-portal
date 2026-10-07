@@ -12,7 +12,7 @@ from .models import (
     Company, PaymentType, PaymentCategory, Payee,
     Document, ExtractedData, Requisition, LineItem,
 )
-from .services.grok_service import EXPENSE_CATEGORIES
+from .services.mistral_service import EXPENSE_CATEGORIES
 from .services.word_generator import WordGenerator
 from .workers.processor import process_document
 

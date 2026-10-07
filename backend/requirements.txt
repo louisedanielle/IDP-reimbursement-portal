@@ -9,8 +9,8 @@ python-dotenv==1.0.0
 sqlalchemy==2.0.36
 alembic==1.14.1
 
-# Grok AI
-openai>=1.59.0
+# Mistral AI
+mistralai==1.4.0
 
 # Async Processing
 celery==5.4.0

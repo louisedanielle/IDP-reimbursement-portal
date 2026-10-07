@@ -8,7 +8,7 @@ from celery import Celery
 from ..config import settings
 from ..database import SessionLocal
 from ..models import Document, ExtractedData
-from ..services.grok_service import GrokService
+from ..services.mistral_service import MistralService      # ← back to Mistral
 
 
 app = Celery(
@@ -29,7 +29,7 @@ app.conf.update(
     broker_connection_retry_on_startup=True,
 )
 
-grok_service = GrokService()
+mistral_service = MistralService()                          # ← back to Mistral
 
 
 @app.task(
@@ -39,7 +39,6 @@ grok_service = GrokService()
     retry_kwargs={'max_retries': 2, 'countdown': 5},
 )
 def process_document(self, document_id: str):
-    """Extract line items from an uploaded document using Grok."""
     db = SessionLocal()
     document = None
     tmp_path = None
@@ -58,7 +57,6 @@ def process_document(self, document_id: str):
         db.commit()
         print(f"🔄 Processing: {document.filename}")
 
-        # --- Write file bytes to a temp file on the worker's disk ---
         if document.file_data:
             import tempfile
             suffix = os.path.splitext(document.filename)[1] or ".jpg"
@@ -69,18 +67,16 @@ def process_document(self, document_id: str):
         elif document.file_path and os.path.exists(document.file_path):
             tmp_path = document.file_path
         else:
-            print("❌ No file data available on Document record")
             document.status = "failed"
             document.error_message = "No file data"
             db.commit()
             return {"status": "failed", "message": "No file data"}
 
-        # --- Extract with Grok ---
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
             result = loop.run_until_complete(
-                grok_service.extract_receipt_data(tmp_path)
+                mistral_service.extract_receipt_data(tmp_path)
             )
         finally:
             loop.close()
@@ -95,7 +91,6 @@ def process_document(self, document_id: str):
             f"type: {document_type} | total: {total_amount}"
         )
 
-        # --- Save extracted data ---
         extracted = ExtractedData(
             document_id=document.id,
             raw_text=result.get("raw_text", ""),
@@ -129,7 +124,6 @@ def process_document(self, document_id: str):
         return {"status": "failed", "message": str(e)}
 
     finally:
-        # Clean up the temp file
         if tmp_path and document and tmp_path != getattr(document, "file_path", None):
             try:
                 os.remove(tmp_path)
