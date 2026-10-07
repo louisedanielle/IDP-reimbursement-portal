@@ -11,7 +11,7 @@ services:
     plan: free
     region: oregon
     ipAllowList: []
-
+    
   - type: web
     name: reimbursement-api
     runtime: python
@@ -46,8 +46,7 @@ services:
       - key: SECRET_KEY
         sync: false
 
-  # ---------- THE MISSING ONE ----------
-  - type: worker
+  - type: web
     name: reimbursement-worker
     runtime: python
     plan: free
