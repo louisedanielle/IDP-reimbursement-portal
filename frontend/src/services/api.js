@@ -110,4 +110,6 @@ export const deleteRequisition = async (id) => {
   return data;
 };
 
+export const API_BASE_URL = API_URL;
+
 export default api;

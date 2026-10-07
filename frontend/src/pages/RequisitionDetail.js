@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   FiArrowLeft, FiDownload, FiTrash2, FiAlertCircle,
 } from 'react-icons/fi';
-import { getRequisition, deleteRequisition } from '../services/api';
+import { getRequisition, deleteRequisition, API_BASE_URL } from '../services/api';
 
 function RequisitionDetail() {
   const { id } = useParams();
@@ -40,7 +40,7 @@ function RequisitionDetail() {
 
   const handleDownload = () => {
     window.open(
-      `http://localhost:8000/api/requisitions/${id}/export/word`,
+      `${API_BASE_URL}/api/requisitions/${id}/export/word`,
       '_blank'
     );
   };

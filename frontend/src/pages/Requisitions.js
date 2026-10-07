@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   FiChevronRight, FiChevronDown, FiDownload, FiEye, FiTrash2, FiFolder
 } from 'react-icons/fi';
-import { getFolderView, deleteRequisition } from '../services/api';
+import { getFolderView, deleteRequisition, API_BASE_URL } from '../services/api';
 
 function Requisitions() {
   const [tree, setTree] = useState({});
@@ -136,7 +136,7 @@ function Requisitions() {
                                       <FiEye size={14}/>
                                     </button>
                                     <button className="btn btn-sm btn-outline-primary"
-                                      onClick={() => window.open(`http://localhost:8000/api/requisitions/${pr.id}/export/word`)}>
+                                      onClick={() => window.open(`${API_BASE_URL}/api/requisitions/${pr.id}/export/word`)}>
                                       <FiDownload size={14}/>
                                     </button>
                                     <button className="btn btn-sm btn-outline-danger"
