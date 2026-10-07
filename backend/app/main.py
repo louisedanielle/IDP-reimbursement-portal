@@ -205,34 +205,57 @@ async def upload_document(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
-    allowed = [
-        "image/jpeg", "image/png", "image/tiff",
-        "image/bmp", "image/webp", "application/pdf",
-    ]
-    if file.content_type not in allowed:
-        raise HTTPException(400, f"File type not allowed. Allowed: {allowed}")
+    try:
+        allowed = [
+            "image/jpeg", "image/png", "image/tiff",
+            "image/bmp", "image/webp", "application/pdf",
+        ]
+        if file.content_type not in allowed:
+            raise HTTPException(400, f"File type not allowed. Allowed: {allowed}")
 
-    content = await file.read()
+        content = await file.read()
+        if not content:
+            raise HTTPException(400, "Empty file")
 
-    document = Document(
-        filename=file.filename,
-        file_path=None,                            
-        file_data=content,                        
-        file_size=len(content),
-        mime_type=file.content_type,
-        status="pending",
-    )
-    db.add(document)
-    db.commit()
-    db.refresh(document)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{timestamp}_{file.filename}"
 
-    process_document.delay(str(document.id))
+        document = Document(
+            filename=file.filename,
+            file_path=None,
+            file_data=content,
+            file_size=len(content),
+            mime_type=file.content_type,
+            status="pending",
+        )
+        db.add(document)
+        db.commit()
+        db.refresh(document)
 
-    return {
-        "document_id": str(document.id),
-        "filename": file.filename,
-        "status": "processing",
-    }
+        print(f"📄 Uploaded: {filename} ({len(content)} bytes)")
+
+        try:
+            process_document.delay(str(document.id))
+            print(f"✅ Task queued for {document.id}")
+        except Exception as e:
+            print(f"⚠️ Celery enqueue failed: {e}")
+            document.status = "failed"
+            document.error_message = f"Queue error: {e}"
+            db.commit()
+
+        return {
+            "document_id": str(document.id),
+            "filename": file.filename,
+            "status": "processing",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Upload error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, f"Upload failed: {str(e)}")
 
 @app.get("/api/documents")
 async def list_documents(
