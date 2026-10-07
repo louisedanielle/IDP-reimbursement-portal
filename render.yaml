@@ -1,53 +1,34 @@
-databases:
-  - name: reimbursement-db
-    databaseName: reimbursement
-    user: reimbursement_user
-    plan: free 
-
 services:
-  - type: redis
-    name: reimbursement-redis
-    plan: free
-    ipAllowList: [] 
-
   - type: web
     name: reimbursement-api
     runtime: python
     plan: free
-    buildCommand: "pip install -r backend/requirements.txt"
-    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
     rootDir: backend
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
       - key: DATABASE_URL
-        fromDatabase:
-          name: reimbursement-db
-          property: connectionString
+        sync: false
       - key: CELERY_BROKER_URL
-        fromService:
-          type: redis
-          name: reimbursement-redis
-          property: connectionString
+        sync: false
       - key: MISTRAL_API_KEY
-        sync: false 
-      - key: UPLOAD_DIR
-        value: /opt/render/project/src/uploads
+        sync: false
 
   - type: worker
     name: reimbursement-worker
     runtime: python
     plan: free
-    buildCommand: "pip install -r backend/requirements.txt"
-    startCommand: "celery -A app.workers.processor worker --loglevel=info"
     rootDir: backend
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "celery -A app.workers.processor worker --loglevel=info"
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
       - key: DATABASE_URL
-        fromDatabase:
-          name: reimbursement-db
-          property: connectionString
+        sync: false
       - key: CELERY_BROKER_URL
-        fromService:
-          type: redis
-          name: reimbursement-redis
-          property: connectionString
+        sync: false
       - key: MISTRAL_API_KEY
         sync: false
