@@ -1,8 +1,22 @@
+databases:
+  - name: reimbursement-db
+    databaseName: reimbursement
+    user: reimbursement_user
+    plan: free
+    region: oregon
+
 services:
+  - type: redis
+    name: reimbursement-redis
+    plan: free
+    region: oregon
+    ipAllowList: []
+
   - type: web
     name: reimbursement-api
     runtime: python
     plan: free
+    region: oregon
     rootDir: backend
     buildCommand: "pip install -r requirements.txt"
     startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
@@ -10,25 +24,59 @@ services:
       - key: PYTHON_VERSION
         value: 3.11.9
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: reimbursement-db
+          property: connectionString
       - key: CELERY_BROKER_URL
-        sync: false
+        fromService:
+          type: redis
+          name: reimbursement-redis
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          type: redis
+          name: reimbursement-redis
+          property: connectionString
       - key: MISTRAL_API_KEY
         sync: false
+      - key: UPLOAD_DIR
+        value: /tmp/uploads
+      - key: OUTPUT_DIR
+        value: /tmp/outputs
+      - key: SECRET_KEY
+        sync: false
 
+  # ---------- THE MISSING ONE ----------
   - type: worker
     name: reimbursement-worker
     runtime: python
     plan: free
+    region: oregon
     rootDir: backend
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "celery -A app.workers.processor worker --loglevel=info"
+    startCommand: "celery -A app.workers.processor worker --loglevel=info --pool=solo"
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: reimbursement-db
+          property: connectionString
       - key: CELERY_BROKER_URL
-        sync: false
+        fromService:
+          type: redis
+          name: reimbursement-redis
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          type: redis
+          name: reimbursement-redis
+          property: connectionString
       - key: MISTRAL_API_KEY
+        sync: false
+      - key: UPLOAD_DIR
+        value: /tmp/uploads
+      - key: OUTPUT_DIR
+        value: /tmp/outputs
+      - key: SECRET_KEY
         sync: false
