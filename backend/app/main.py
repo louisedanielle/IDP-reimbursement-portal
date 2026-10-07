@@ -212,17 +212,12 @@ async def upload_document(
     if file.content_type not in allowed:
         raise HTTPException(400, f"File type not allowed. Allowed: {allowed}")
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"{timestamp}_{file.filename}"
-    filepath = os.path.join(settings.UPLOAD_DIR, filename)
-
     content = await file.read()
-    with open(filepath, "wb") as f:
-        f.write(content)
 
     document = Document(
         filename=file.filename,
-        file_path=filepath,
+        file_path=None,                            
+        file_data=content,                        
         file_size=len(content),
         mime_type=file.content_type,
         status="pending",
@@ -238,7 +233,6 @@ async def upload_document(
         "filename": file.filename,
         "status": "processing",
     }
-
 
 @app.get("/api/documents")
 async def list_documents(

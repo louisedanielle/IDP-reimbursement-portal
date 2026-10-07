@@ -38,9 +38,9 @@ mistral_service = MistralService()
     retry_kwargs={'max_retries': 2, 'countdown': 5},
 )
 def process_document(self, document_id: str):
-    """Extract line items from the uploaded document."""
     db = SessionLocal()
     document = None
+    tmp_path = None
 
     try:
         try:
@@ -56,11 +56,28 @@ def process_document(self, document_id: str):
         db.commit()
         print(f"🔄 Processing: {document.filename}")
 
+        # Write the file bytes to a temp file on the worker's own disk
+        if document.file_data:
+            import tempfile
+            suffix = os.path.splitext(document.filename)[1] or ".jpg"
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+            tmp.write(document.file_data)
+            tmp.close()
+            tmp_path = tmp.name
+        elif document.file_path and os.path.exists(document.file_path):
+            tmp_path = document.file_path
+        else:
+            print("❌ No file data available on Document record")
+            document.status = "failed"
+            document.error_message = "No file data"
+            db.commit()
+            return {"status": "failed", "message": "No file data"}
+
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
             result = loop.run_until_complete(
-                mistral_service.extract_receipt_data(document.file_path)
+                mistral_service.extract_receipt_data(tmp_path)
             )
         finally:
             loop.close()

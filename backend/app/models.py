@@ -1,6 +1,6 @@
 from sqlalchemy import (
     Column, Integer, String, Float, DateTime, ForeignKey, JSON,
-    Text, Boolean, Uuid,
+    Text, Boolean, Uuid, LargeBinary,   
 )
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -11,19 +11,20 @@ from .database import Base
 
 # ============ LOOKUP TABLES ============
 
-class Company(Base):
-    __tablename__ = "companies"
+class Document(Base):
+    __tablename__ = "documents"
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
-    name = Column(String(200), unique=True, nullable=False)
-    short_name = Column(String(20), unique=True, nullable=True)
-    address = Column(String(500), nullable=True)
-    phone = Column(String(100), nullable=True)
-    fax = Column(String(100), nullable=True)
-    is_active = Column(Boolean, default=True)
-    created_date = Column(DateTime, default=datetime.utcnow)
+    filename = Column(String(255), nullable=False)
+    file_path = Column(String(500), nullable=True)    
+    file_data = Column(LargeBinary, nullable=True)    
+    file_size = Column(Integer)
+    mime_type = Column(String(100))
+    upload_date = Column(DateTime, default=datetime.utcnow)
+    status = Column(String(50), default="pending")
+    error_message = Column(Text, nullable=True)
 
-    categories = relationship("PaymentCategory", back_populates="company")
+    extracted_data = relationship("ExtractedData", back_populates="document", uselist=False)
 
 
 class PaymentType(Base):
