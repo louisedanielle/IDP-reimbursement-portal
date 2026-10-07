@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
     CELERY_RESULT_BACKEND: str = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
 
+    PAYMENT_DETAILS_BASE_URL: str = os.getenv(
+        "PAYMENT_DETAILS_BASE_URL",
+        "http://localhost:8000",
+    )
+
     # ==================================================================
     # COMPANY TREE — from the spreadsheet
     # Company → Payment Type → Nature → [Payees]
