@@ -1,0 +1,27 @@
+# Core
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.0
+python-dotenv==1.0.0
+
+# Database
+sqlalchemy==2.0.36
+alembic==1.14.1
+
+# Mistral AI
+mistralai==1.4.0
+
+# Async Processing
+celery==5.4.0
+redis==5.2.1
+
+# File Generation
+openpyxl==3.1.5
+
+# Utilities
+python-multipart==0.0.20
+aiofiles==24.1.0
+python-json-logger==3.2.1
+python-docx==1.1.2
+python-dateutil==2.9.0.post0

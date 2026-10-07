@@ -1,0 +1,195 @@
+# ============================================================
+# Python
+# ============================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+.ENV/
+env.bak/
+venv.bak/
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+
+# MyPy / type checkers
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ============================================================
+# Node / React
+# ============================================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.pnp/
+.pnp.js
+
+# Production build
+/build
+frontend/build/
+frontend/dist/
+
+# React / CRA
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ============================================================
+# Environment files (DO NOT COMMIT)
+# ============================================================
+.env
+.env.*
+!.env.example
+*.env
+!.env.example
+
+# ============================================================
+# Database
+# ============================================================
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+reimbursement.db
+reimbursement.db.backup
+
+# ============================================================
+# Uploaded files and generated documents
+# ============================================================
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+backend/outputs/*
+!backend/outputs/.gitkeep
+
+backend/training_data/*
+!backend/training_data/.gitkeep
+
+backend/models/*
+!backend/models/.gitkeep
+
+# Generated Word / Excel / PDF files
+*.docx
+*.xlsx
+*.xls
+*.pdf
+!docs/*.pdf
+
+# ============================================================
+# Logs and temp files
+# ============================================================
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+
+# ============================================================
+# OS-specific
+# ============================================================
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ============================================================
+# IDE / Editors
+# ============================================================
+.vscode/*
+!.vscode/settings.json.example
+!.vscode/extensions.json
+.idea/
+*.iml
+*.sublime-project
+*.sublime-workspace
+.vim/
+*.swn
+*.swp
+
+# ============================================================
+# Redis / Celery
+# ============================================================
+celerybeat-schedule
+celerybeat.pid
+dump.rdb
+appendonly.aof
+*.rdb
+
+# ============================================================
+# Credentials / secrets
+# ============================================================
+credentials/
+*.pem
+*.key
+*service-account*.json
+!.example-service-account.json
+secrets.json
+
+# ============================================================
+# Deployment
+# ============================================================
+.vercel
+.vercelignore
+.render/
+.renderignore
+
+# ============================================================
+# Misc
+# ============================================================
+*.pid
+.DS_Store?
+.Trashes
+*~
+\#*\#
+.\#*
