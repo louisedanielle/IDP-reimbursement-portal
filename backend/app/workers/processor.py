@@ -1,7 +1,8 @@
+# backend/app/workers/processor.py
 import asyncio
 from uuid import UUID
-
 from celery import Celery
+from datetime import datetime
 
 from ..config import settings
 from ..database import SessionLocal
@@ -37,6 +38,7 @@ mistral_service = MistralService()
     retry_kwargs={'max_retries': 2, 'countdown': 5},
 )
 def process_document(self, document_id: str):
+    """Extract line items from the uploaded document."""
     db = SessionLocal()
     document = None
 

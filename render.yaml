@@ -53,7 +53,7 @@ services:
     region: oregon
     rootDir: backend
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "celery -A app.workers.processor worker --loglevel=info --pool=solo"
+    startCommand: "uvicorn app.worker_healthcheck:app --host 0.0.0.0 --port $PORT & celery -A app.workers.processor worker --loglevel=info --pool=solo"
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
