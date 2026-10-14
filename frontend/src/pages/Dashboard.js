@@ -137,7 +137,7 @@ function Dashboard() {
               <div
                 style={{
                   padding: '16px 20px',
-                  background: 'linear-gradient(135deg, #1a4d8f 0%, #0ea5e9 100%)',
+                  background: 'var(--primary)',
                   color: 'white',
                   display: 'flex',
                   alignItems: 'center',
