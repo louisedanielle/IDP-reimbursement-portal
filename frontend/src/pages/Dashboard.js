@@ -1,9 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-   FiUploadCloud, FiEdit3, FiFolder, FiFileText, FiTag, FiDownload,
+  FiUploadCloud, FiEdit3, FiFolder, FiFileText, FiTag, FiDownload,
 } from 'react-icons/fi';
-import { getDashboardStats } from '../services/api';
+import {
+  getDashboardStats,
+  downloadCompanyAnnualReport,
+  downloadAllCompaniesAnnualReport,
+} from '../services/api';
 
 function Dashboard() {
   const [stats, setStats] = useState(null);
