@@ -1,12 +1,13 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { Navbar, Nav, Container } from 'react-bootstrap';
-import { FiHome, FiUploadCloud, FiFolder } from 'react-icons/fi';
+import { FiHome, FiUploadCloud, FiFolder, FiEdit3 } from 'react-icons/fi';
 import Dashboard from './pages/Dashboard';
 import Upload from './pages/Upload';
 import Review from './pages/Review';
 import Requisitions from './pages/Requisitions';
 import RequisitionDetail from './pages/RequisitionDetail';
+import ManualInput from './pages/ManualInput';
 
 function NavLink({ to, icon, children }) {
   const location = useLocation();
@@ -43,6 +44,7 @@ function App() {
             <Nav className="ms-auto">
               <NavLink to="/" icon={<FiHome size={16}/>}>Dashboard</NavLink>
               <NavLink to="/upload" icon={<FiUploadCloud size={16}/>}>Upload</NavLink>
+              <NavLink to="/manual" icon={<FiEdit3 size={16} />}>Manual Input</NavLink>
               <NavLink to="/requisitions" icon={<FiFolder size={16}/>}>Requisitions</NavLink>
             </Nav>
           </Navbar.Collapse>
@@ -53,6 +55,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/upload" element={<Upload />} />
+          <Route path="/manual" element={<ManualInput />} />
           <Route path="/review" element={<Review />} />
           <Route path="/requisitions" element={<Requisitions />} />
           <Route path="/requisitions/:id" element={<RequisitionDetail />} />

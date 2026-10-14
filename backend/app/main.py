@@ -21,7 +21,12 @@ app = FastAPI(title=settings.APP_NAME)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "https://reimbursement-frontend.onrender.com",],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://reimbursement-frontend.onrender.com",
+        "https://reimbursement-frontend-*.onrender.com",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -205,57 +210,88 @@ async def upload_document(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
+    allowed = [
+        "image/jpeg", "image/png", "image/tiff",
+        "image/bmp", "image/webp", "application/pdf",
+    ]
+    if file.content_type not in allowed:
+        raise HTTPException(400, f"File type not allowed. Allowed: {allowed}")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(400, "Empty file")
+
+    document = Document(
+        filename=file.filename,
+        file_path=None,
+        file_data=content,
+        file_size=len(content),
+        mime_type=file.content_type,
+        status="pending",
+    )
+    db.add(document)
+    db.commit()
+    db.refresh(document)
+
+    print(f"📄 Uploaded: {document.filename} ({len(content)} bytes)")
+
     try:
-        allowed = [
-            "image/jpeg", "image/png", "image/tiff",
-            "image/bmp", "image/webp", "application/pdf",
-        ]
-        if file.content_type not in allowed:
-            raise HTTPException(400, f"File type not allowed. Allowed: {allowed}")
-
-        content = await file.read()
-        if not content:
-            raise HTTPException(400, "Empty file")
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{timestamp}_{file.filename}"
-
-        document = Document(
-            filename=file.filename,
-            file_path=None,
-            file_data=content,
-            file_size=len(content),
-            mime_type=file.content_type,
-            status="pending",
-        )
-        db.add(document)
-        db.commit()
-        db.refresh(document)
-
-        print(f"📄 Uploaded: {filename} ({len(content)} bytes)")
-
-        try:
-            process_document.delay(str(document.id))
-            print(f"✅ Task queued for {document.id}")
-        except Exception as e:
-            print(f"⚠️ Celery enqueue failed: {e}")
-            document.status = "failed"
-            document.error_message = f"Queue error: {e}"
-            db.commit()
-
-        return {
-            "document_id": str(document.id),
-            "filename": file.filename,
-            "status": "processing",
-        }
-
-    except HTTPException:
-        raise
+        process_document.delay(str(document.id))
+        print(f"✅ Task queued for {document.id}")
     except Exception as e:
-        print(f"❌ Upload error: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(500, f"Upload failed: {str(e)}")
+        print(f"⚠️ Celery enqueue failed: {e}")
+        document.status = "failed"
+        document.error_message = f"Queue error: {e}"
+        db.commit()
+
+    return {
+        "document_id": str(document.id),
+        "filename": file.filename,
+        "status": "processing",
+    }
+
+
+@app.post("/api/documents/manual")
+async def create_manual_document(db: Session = Depends(get_db)):
+    """
+    Create a blank Document so the Review page can be opened manually
+    without uploading a file.
+    """
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    document = Document(
+        filename=f"manual_{timestamp}",
+        file_path=None,
+        file_data=None,
+        file_size=0,
+        mime_type="application/x-manual",
+        status="completed",
+    )
+    db.add(document)
+    db.commit()
+    db.refresh(document)
+
+    extracted = ExtractedData(
+        document_id=document.id,
+        raw_text="",
+        structured_data={
+            "items": [],
+            "payee_name": None,
+            "document_type": "manual",
+            "total_amount": None,
+        },
+        confidence_score=1.0,
+        is_verified=False,
+    )
+    db.add(extracted)
+    db.commit()
+
+    print(f"✍️  Manual document created: {document.id}")
+
+    return {
+        "document_id": str(document.id),
+        "status": "ready",
+    }
+
 
 @app.get("/api/documents")
 async def list_documents(
@@ -330,11 +366,6 @@ async def get_extracted(doc_id: UUID, db: Session = Depends(get_db)):
 
 @app.get("/api/documents/{doc_id}/suggestions")
 async def get_suggestions(doc_id: UUID, db: Session = Depends(get_db)):
-    """
-    Auto-fill company, payment type, nature, payee, and period.
-
-    Rule: payee follows nature.
-    """
     extracted = (
         db.query(ExtractedData)
         .filter(ExtractedData.document_id == doc_id)
@@ -433,18 +464,12 @@ async def save_review(
     data: dict,
     db: Session = Depends(get_db),
 ):
-    """
-    Save the reviewed items and create/append to a requisition.
-
-    Total is ALWAYS the sum of the line items. The document's declared
-    total is preserved in extracted.structured_data for reference.
-    """
     items = data.get("items", [])
 
     company_id = _to_uuid(data.get("company_id"))
     payment_category_id = _to_uuid(data.get("payment_category_id"))
     payee_name = (data.get("payee_name") or "").strip()
-    period = (data.get("period") or "").strip() or None
+    period = _normalize_period(data.get("period"))
 
     if not payee_name:
         raise HTTPException(400, "payee_name is required")
@@ -525,11 +550,9 @@ async def save_review(
     else:
         print(f"➕ Appending to {requisition.pr_number}")
 
-    # Remove previous line items from THIS document
     db.query(LineItem).filter(LineItem.source_document_id == doc_id).delete()
     db.flush()
 
-    # Re-number remaining items
     remaining = (
         db.query(LineItem)
         .filter(LineItem.requisition_id == requisition.id)
@@ -539,19 +562,18 @@ async def save_review(
     for i, li in enumerate(remaining, start=1):
         li.item_number = i
 
-    # Skip any item flagged as the document total
     real_items = [it for it in items if not it.get("is_total")]
 
-    # If only a total was extracted (no line items), synthesize one
-    # line item from the document's declared total.
     doc_total = None
     if extracted and extracted.structured_data:
         doc_total = extracted.structured_data.get("total_amount")
 
     if not real_items and doc_total is not None and float(doc_total) > 0:
         real_items = [{
-            "description": _default_total_description(nature_name=category.name,
-                                                     doc_type=(extracted.structured_data or {}).get("document_type")),
+            "description": _default_total_description(
+                nature_name=category.name,
+                doc_type=(extracted.structured_data or {}).get("document_type"),
+            ),
             "amount_hkd": float(doc_total),
             "date": None,
             "category": None,
@@ -574,9 +596,6 @@ async def save_review(
 
     db.flush()
 
-    # Total = sum of line items, ALWAYS.
-    # The document's declared total lives in extracted.structured_data
-    # so the frontend can flag a mismatch.
     all_items = (
         db.query(LineItem)
         .filter(LineItem.requisition_id == requisition.id)
@@ -616,6 +635,13 @@ async def reprocess_document(doc_id: UUID, db: Session = Depends(get_db)):
 
 @app.get("/api/dashboard/stats")
 async def get_dashboard_stats(db: Session = Depends(get_db)):
+    """
+    Dashboard summary:
+      - Last month: amount paid + count
+      - This month: amount paid + count
+      - This year: amount paid + count
+      - Breakdown: Company → Category → { count, total }  (this year)
+    """
     from dateutil.relativedelta import relativedelta
 
     today = datetime.utcnow().date()
@@ -650,17 +676,47 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
 
     by_company = {}
     for r in year_rows:
-        key = r.company_name or "Unknown"
-        by_company.setdefault(key, {"count": 0, "total": 0.0})
-        by_company[key]["count"] += 1
-        by_company[key]["total"] += r.total_amount or 0
+        company = r.company_name or "Unknown"
+        category = r.category_name or "Uncategorized"
+        amount = r.total_amount or 0
 
-    by_category = {}
-    for r in year_rows:
-        key = r.category_name or "Unknown"
-        by_category.setdefault(key, {"count": 0, "total": 0.0})
-        by_category[key]["count"] += 1
-        by_category[key]["total"] += r.total_amount or 0
+        by_company.setdefault(company, {
+            "total": 0.0,
+            "count": 0,
+            "categories": {},
+            "company_id": str(r.company_id) if r.company_id else None,
+        })
+        by_company[company]["total"] += amount
+        by_company[company]["count"] += 1
+
+        by_company[company]["categories"].setdefault(category, {
+            "count": 0,
+            "total": 0.0,
+        })
+        by_company[company]["categories"][category]["count"] += 1
+        by_company[company]["categories"][category]["total"] += amount
+
+    ordered = {}
+    for company in sorted(by_company.keys()):
+        entry = by_company[company]
+        entry["total"] = round(entry["total"], 2)
+
+        sorted_cats = dict(
+            sorted(
+                entry["categories"].items(),
+                key=lambda kv: kv[1]["total"],
+                reverse=True,
+            )
+        )
+        for cat in sorted_cats:
+            sorted_cats[cat]["total"] = round(sorted_cats[cat]["total"], 2)
+
+        ordered[company] = {
+            "total": entry["total"],
+            "count": entry["count"],
+            "company_id": entry["company_id"],
+            "categories": sorted_cats,
+        }
 
     return {
         "last_month": {
@@ -681,9 +737,296 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
             "count": year_count,
             "total": round(year_total, 2),
         },
-        "by_company_this_year": by_company,
-        "by_category_this_year": by_category,
+        "by_company_this_year": ordered,
     }
+
+
+# ============ ANNUAL REPORT EXCEL ============
+
+def _build_annual_report_sheet(wb, company_name: str, year: str, requisitions: list):
+    """
+    Add one worksheet to `wb` showing Category × Month for the given company & year.
+    """
+    import openpyxl
+    from openpyxl.styles import Font, Border, Side, Alignment
+
+    sheet_name = (company_name[:28] + "..") if len(company_name) > 31 else company_name
+    ws = wb.create_sheet(title=sheet_name)
+
+    thin = Side(style="thin", color="CCCCCC")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    bold = Font(bold=True)
+    right = Alignment(horizontal="right")
+    center = Alignment(horizontal="center")
+
+    months = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ]
+
+    ws.merge_cells("A1:N1")
+    ws["A1"] = f"{company_name} — Annual Report {year}"
+    ws["A1"].font = Font(bold=True, size=14)
+
+    header_row = 3
+    ws.cell(row=header_row, column=1, value="Category").font = bold
+    for i, m in enumerate(months):
+        c = ws.cell(row=header_row, column=2 + i, value=m)
+        c.font = bold
+        c.alignment = center
+    total_col = 2 + len(months)
+    ws.cell(row=header_row, column=total_col, value="Total").font = bold
+    ws.cell(row=header_row, column=total_col).alignment = center
+
+    grid: dict = {}
+    unknown_month: dict = {}
+
+    for r in requisitions:
+        category = r.category_name or "Uncategorized"
+        amount = float(r.total_amount or 0)
+
+        _, month = _split_period(r.period)
+        if month == "—" or not month.isdigit():
+            unknown_month[category] = unknown_month.get(category, 0) + amount
+            continue
+
+        m_idx = int(month) - 1
+        if m_idx < 0 or m_idx > 11:
+            unknown_month[category] = unknown_month.get(category, 0) + amount
+            continue
+
+        grid.setdefault(category, [0.0] * 12)
+        grid[category][m_idx] += amount
+
+    row = header_row + 1
+    for category in sorted(grid.keys()):
+        ws.cell(row=row, column=1, value=category)
+        amounts = grid[category]
+        for i, amt in enumerate(amounts):
+            cell = ws.cell(row=row, column=2 + i, value=round(amt, 2))
+            cell.number_format = "#,##0.00"
+            cell.alignment = right
+        total_cell = ws.cell(
+            row=row,
+            column=total_col,
+            value=f"=SUM(B{row}:M{row})",
+        )
+        total_cell.font = bold
+        total_cell.number_format = "#,##0.00"
+        total_cell.alignment = right
+        row += 1
+
+    if unknown_month:
+        row += 1
+        ws.cell(row=row, column=1, value="Items with no month").font = Font(italic=True)
+        row += 1
+        for category, amt in sorted(unknown_month.items()):
+            ws.cell(row=row, column=1, value=category)
+            ws.cell(row=row, column=total_col, value=round(amt, 2)).number_format = "#,##0.00"
+            row += 1
+
+    total_row = row + 1
+    ws.cell(row=total_row, column=1, value="Total").font = bold
+    for i in range(2, 2 + len(months)):
+        col_letter = openpyxl.utils.get_column_letter(i)
+        c = ws.cell(
+            row=total_row,
+            column=i,
+            value=f"=SUM({col_letter}{header_row + 1}:{col_letter}{row})",
+        )
+        c.font = bold
+        c.number_format = "#,##0.00"
+        c.alignment = right
+    grand_total = ws.cell(
+        row=total_row,
+        column=total_col,
+        value=f"=SUM(N{header_row + 1}:N{row})",
+    )
+    grand_total.font = bold
+    grand_total.number_format = "#,##0.00"
+    grand_total.alignment = right
+
+    ws.column_dimensions["A"].width = 32
+    for i in range(2, 2 + len(months) + 1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = 12
+
+    for r in range(header_row, total_row + 1):
+        for c in range(1, total_col + 1):
+            ws.cell(row=r, column=c).border = border
+
+
+@app.get("/api/companies/{company_id}/annual-report")
+async def company_annual_report(
+    company_id: UUID,
+    year: str | None = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Download an Excel workbook for a single company showing
+    Category × Month for the given year (defaults to current year).
+    """
+    import openpyxl
+    import tempfile
+
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(404, "Company not found")
+
+    year = (year or datetime.utcnow().strftime("%Y")).strip()
+
+    rows = (
+        db.query(Requisition)
+        .filter(
+            Requisition.company_id == company.id,
+            Requisition.period.like(f"{year}%"),
+        )
+        .order_by(Requisition.created_date.asc())
+        .all()
+    )
+
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+    _build_annual_report_sheet(wb, company.name, year, rows)
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+    tmp.close()
+    wb.save(tmp.name)
+
+    safe_name = "".join(
+        c if c.isalnum() or c in " -_" else "_"
+        for c in company.name
+    )[:60]
+
+    return FileResponse(
+        tmp.name,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename=f"{safe_name} - Annual Report {year}.xlsx",
+    )
+
+
+@app.get("/api/dashboard/annual-report")
+async def dashboard_annual_report(
+    year: str | None = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Download one workbook with one sheet per company (Category × Month),
+    plus a Summary sheet totalling across all companies.
+    """
+    import openpyxl
+    import tempfile
+    from openpyxl.styles import Font, Border, Side, Alignment
+
+    year = (year or datetime.utcnow().strftime("%Y")).strip()
+
+    companies = (
+        db.query(Company)
+        .filter(Company.is_active == True)
+        .order_by(Company.name)
+        .all()
+    )
+
+    wb = openpyxl.Workbook()
+    summary = wb.active
+    summary.title = f"Summary {year}"
+
+    thin = Side(style="thin", color="CCCCCC")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    bold = Font(bold=True)
+    right = Alignment(horizontal="right")
+    center = Alignment(horizontal="center")
+
+    months = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ]
+
+    summary.merge_cells("A1:N1")
+    summary["A1"] = f"All Companies — Annual Report {year}"
+    summary["A1"].font = Font(bold=True, size=14)
+
+    header_row = 3
+    summary.cell(row=header_row, column=1, value="Company").font = bold
+    for i, m in enumerate(months):
+        c = summary.cell(row=header_row, column=2 + i, value=m)
+        c.font = bold
+        c.alignment = center
+    total_col = 2 + len(months)
+    summary.cell(row=header_row, column=total_col, value="Total").font = bold
+    summary.cell(row=header_row, column=total_col).alignment = center
+
+    row = header_row + 1
+    for company in companies:
+        rows = (
+            db.query(Requisition)
+            .filter(
+                Requisition.company_id == company.id,
+                Requisition.period.like(f"{year}%"),
+            )
+            .all()
+        )
+
+        if rows:
+            _build_annual_report_sheet(wb, company.name, year, rows)
+
+        amounts = [0.0] * 12
+        for r in rows:
+            _, month = _split_period(r.period)
+            if not month.isdigit():
+                continue
+            m_idx = int(month) - 1
+            if 0 <= m_idx < 12:
+                amounts[m_idx] += float(r.total_amount or 0)
+
+        summary.cell(row=row, column=1, value=company.name)
+        for i, amt in enumerate(amounts):
+            cell = summary.cell(row=row, column=2 + i, value=round(amt, 2))
+            cell.number_format = "#,##0.00"
+            cell.alignment = right
+        total_cell = summary.cell(
+            row=row, column=total_col, value=f"=SUM(B{row}:M{row})"
+        )
+        total_cell.font = bold
+        total_cell.number_format = "#,##0.00"
+        total_cell.alignment = right
+        row += 1
+
+    total_row = row
+    summary.cell(row=total_row, column=1, value="Total").font = bold
+    for i in range(2, 2 + len(months)):
+        col = openpyxl.utils.get_column_letter(i)
+        c = summary.cell(
+            row=total_row,
+            column=i,
+            value=f"=SUM({col}{header_row + 1}:{col}{row - 1})",
+        )
+        c.font = bold
+        c.number_format = "#,##0.00"
+        c.alignment = right
+    gt = summary.cell(
+        row=total_row, column=total_col, value=f"=SUM(N{header_row + 1}:N{row - 1})"
+    )
+    gt.font = bold
+    gt.number_format = "#,##0.00"
+    gt.alignment = right
+
+    summary.column_dimensions["A"].width = 36
+    for i in range(2, 2 + len(months) + 1):
+        summary.column_dimensions[openpyxl.utils.get_column_letter(i)].width = 12
+
+    for r in range(header_row, total_row + 1):
+        for c in range(1, total_col + 1):
+            summary.cell(row=r, column=c).border = border
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+    tmp.close()
+    wb.save(tmp.name)
+
+    return FileResponse(
+        tmp.name,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename=f"Annual Report {year}.xlsx",
+    )
 
 
 # ============ REQUISITIONS ============
@@ -736,6 +1079,11 @@ async def list_folder_view(
     company_id: UUID | None = None,
     db: Session = Depends(get_db),
 ):
+    """
+    Return a nested tree for the folder view:
+
+      Company → Year → Month → Category → Payee → [ requisitions ]
+    """
     q = db.query(Requisition)
     if company_id:
         q = q.filter(Requisition.company_id == company_id)
@@ -745,25 +1093,48 @@ async def list_folder_view(
     tree: dict = {}
     for r in rows:
         company = r.company_name or "Unknown Company"
+        year, month = _split_period(r.period)
         category = r.category_name or "Uncategorized"
-        payee = r.payee_name or "Unknown"
-        period = r.period or "No Period"
+        payee = r.payee_name or "Unknown Payee"
 
         tree.setdefault(company, {})
-        tree[company].setdefault(category, {})
-        tree[company][category].setdefault(payee, {})
-        tree[company][category][payee].setdefault(period, []).append({
+        tree[company].setdefault(year, {})
+        tree[company][year].setdefault(month, {})
+        tree[company][year][month].setdefault(category, {})
+        tree[company][year][month][category].setdefault(payee, []).append({
             "id": str(r.id),
             "pr_number": r.pr_number,
+            "payee_name": r.payee_name,
+            "payment_type_name": r.payment_type_name,
             "total_amount": r.total_amount,
             "status": r.status,
+            "period": r.period,
+            "created_date": r.created_date.isoformat() if r.created_date else None,
             "item_count": (
                 db.query(LineItem)
                 .filter(LineItem.requisition_id == r.id)
                 .count()
             ),
         })
-    return tree
+
+    sorted_tree = {}
+    for company in sorted(tree.keys()):
+        sorted_tree[company] = {}
+        for year in sorted(tree[company].keys(), reverse=True):
+            sorted_tree[company][year] = {}
+            for month in sorted(tree[company][year].keys(), reverse=True):
+                sorted_tree[company][year][month] = {}
+                for category in sorted(tree[company][year][month].keys()):
+                    sorted_tree[company][year][month][category] = {}
+                    for payee in sorted(tree[company][year][month][category].keys()):
+                        prs = sorted(
+                            tree[company][year][month][category][payee],
+                            key=lambda x: x.get("created_date") or "",
+                            reverse=True,
+                        )
+                        sorted_tree[company][year][month][category][payee] = prs
+
+    return sorted_tree
 
 
 @app.get("/api/requisitions/{req_id}")
@@ -1108,6 +1479,60 @@ def _parse_date(date_str):
         except (ValueError, TypeError):
             continue
     return None
+
+
+def _split_period(period: str | None) -> tuple:
+    """
+    Return (year, month) from a period string.
+      "2026-07"       → ("2026", "07")
+      "2026"          → ("2026", "—")
+      "2026-07-15"    → ("2026", "07")
+      None / garbage  → ("—", "—")
+    """
+    if not period or not isinstance(period, str):
+        return ("—", "—")
+
+    s = period.strip()
+
+    if len(s) >= 7 and s[4] == "-":
+        year = s[:4]
+        month = s[5:7]
+        if year.isdigit() and month.isdigit():
+            return (year, month)
+
+    if len(s) == 4 and s.isdigit():
+        return (s, "—")
+
+    return ("—", "—")
+
+
+def _normalize_period(value):
+    """
+    Normalize a period string:
+      "2026-07"     → "2026-07"
+      "2026/07"     → "2026-07"
+      "2026-7"      → "2026-07"
+      "2026"        → "2026"
+      "2026-07-15"  → "2026-07"
+      "" / None     → None
+    """
+    if not value:
+        return None
+
+    s = str(value).strip().replace("/", "-").replace(".", "-")
+
+    import re as _re
+
+    m = _re.match(r"^(\d{4})-(\d{1,2})(?:-\d{1,2})?", s)
+    if m:
+        y, mo = m.group(1), int(m.group(2))
+        return f"{y}-{mo:02d}"
+
+    if _re.match(r"^\d{4}$", s):
+        return s
+
+    return s or None
+
 
 def _default_total_description(nature_name: str, doc_type: str | None = None) -> str:
     """

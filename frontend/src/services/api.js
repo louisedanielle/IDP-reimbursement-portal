@@ -110,6 +110,21 @@ export const deleteRequisition = async (id) => {
   return data;
 };
 
+export const createManualDocument = async () => {
+  const { data } = await api.post('/api/documents/manual');
+  return data;
+};
+
+export const downloadCompanyAnnualReport = (companyId, year) => {
+  const url = `${API_BASE_URL}/api/companies/${companyId}/annual-report?year=${year}`;
+  window.open(url, '_blank');
+};
+
+export const downloadAllCompaniesAnnualReport = (year) => {
+  const url = `${API_BASE_URL}/api/dashboard/annual-report?year=${year}`;
+  window.open(url, '_blank');
+};
+
 export const API_BASE_URL = API_URL;
 
 export default api;
