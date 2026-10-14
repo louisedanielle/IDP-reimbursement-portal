@@ -295,11 +295,6 @@ function Review() {
             <FiArrowLeft size={14} /> Back
           </button>
           <h1 className="page-title mb-1">Review Extracted Data</h1>
-          <p className="page-subtitle">
-            {isFreeForm
-              ? 'Write each particular on its own line item, then fill in the amount.'
-              : 'Values below were auto-detected from the document. Adjust as needed, then save.'}
-          </p>
         </div>
         <div className="d-flex gap-2">
           <button

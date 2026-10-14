@@ -50,9 +50,6 @@ function Requisitions() {
     <div>
       <div className="page-header mb-4">
         <h1 className="page-title">Requisitions</h1>
-        <p className="page-subtitle">
-          Grouped by Company → Year → Month → Category → Payee
-        </p>
       </div>
 
       {Object.keys(tree).length === 0 && (
