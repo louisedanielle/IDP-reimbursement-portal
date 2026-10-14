@@ -48,7 +48,7 @@ function Dashboard() {
         <p className="page-subtitle">Overview of payment requisitions</p>
       </div>
 
-      {/* ---------- 5 stat cards ---------- */}
+      {/* ---------- Stat cards ---------- */}
       <div className="row g-3 mb-4">
         <div className="col-lg-4 col-md-6">
           <div className="stat-card h-100">
@@ -109,14 +109,12 @@ function Dashboard() {
         </div>
       </div>
 
-            {/* ---------- Per-Company Category Breakdown (this year) ---------- */}
+      {/* ---------- Per-Company Category Breakdown (this year) ---------- */}
       {Object.keys(byCompany).length > 0 && (
         <>
-          <div
-            className="mb-3"
-            style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-          >
-            <FiTag style={{ color: 'var(--neutral-500)' }} />
+          {/* Section header */}
+          <div className="d-flex align-items-center mb-3" style={{ gap: 8 }}>
+            <FiTag style={{ color: 'var(--neutral-400)' }} size={16} />
             <h5 style={{ margin: 0, fontWeight: 600, flex: 1 }}>
               Spend by Company &amp; Category · {thisYear.label}
             </h5>
@@ -125,123 +123,194 @@ function Dashboard() {
               onClick={() => downloadAllCompaniesAnnualReport(thisYear.label)}
               title="Download all companies annual report"
             >
-              <FiDownload size={14} /> All Companies Annual Report
+              <FiDownload size={14} /> All Companies Report
             </button>
           </div>
 
           {Object.entries(byCompany).map(([company, data]) => (
-            <div key={company} className="pro-card mb-4">
+            <div
+              key={company}
+              className="pro-card mb-3"
+              style={{ overflow: 'hidden' }}
+            >
+              {/* Company header */}
               <div
-                className="pro-card-header"
-                style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+                style={{
+                  padding: '16px 20px',
+                  background: 'linear-gradient(135deg, #1a4d8f 0%, #0ea5e9 100%)',
+                  color: 'white',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                }}
               >
-                <FiFolder />
-                <span style={{ flex: 1, fontWeight: 600 }}>{company}</span>
-                <span
+                <FiFolder size={18} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div
+                    style={{
+                      fontWeight: 600,
+                      fontSize: '1rem',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {company}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '0.75rem',
+                      opacity: 0.85,
+                      marginTop: 2,
+                    }}
+                  >
+                    {data.count} requisition{data.count !== 1 ? 's' : ''} ·{' '}
+                    {Object.keys(data.categories).length} categor
+                    {Object.keys(data.categories).length !== 1 ? 'ies' : 'y'}
+                  </div>
+                </div>
+                <div
                   style={{
-                    fontSize: '0.75rem',
-                    color: 'var(--neutral-500)',
+                    fontSize: '1.25rem',
+                    fontWeight: 700,
+                    whiteSpace: 'nowrap',
                   }}
                 >
-                  {data.count} PR{data.count !== 1 ? 's' : ''}
-                </span>
-                <span style={{ fontWeight: 700, color: 'var(--primary)' }}>
                   HK${fmt(data.total)}
-                </span>
+                </div>
                 {data.company_id && (
                   <button
-                    className="btn btn-sm btn-outline-primary d-flex align-items-center gap-1"
+                    className="btn btn-sm d-flex align-items-center gap-1"
                     onClick={() =>
                       downloadCompanyAnnualReport(data.company_id, thisYear.label)
                     }
                     title={`Download ${company} annual report`}
+                    style={{
+                      background: 'rgba(255,255,255,0.15)',
+                      color: 'white',
+                      border: '1px solid rgba(255,255,255,0.35)',
+                      fontSize: '0.75rem',
+                    }}
                   >
-                    <FiDownload size={14} /> Annual Report
+                    <FiDownload size={13} /> Annual
                   </button>
                 )}
               </div>
 
-              <table className="pro-table" style={{ marginBottom: 0 }}>
-                <thead>
-                  <tr>
-                    <th>Category</th>
-                    <th style={{ textAlign: 'center', width: '110px' }}>PRs</th>
-                    <th style={{ textAlign: 'right', width: '160px' }}>
-                      Amount (HKD)
-                    </th>
-                    <th style={{ textAlign: 'right', width: '100px' }}>
-                      % of Company
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(data.categories).map(([cat, catData]) => {
-                    const pct =
-                      data.total > 0 ? (catData.total / data.total) * 100 : 0;
-                    return (
-                      <tr key={cat}>
-                        <td style={{ fontWeight: 500 }}>{cat}</td>
-                        <td style={{ textAlign: 'center' }}>
-                          <span
-                            style={{
-                              display: 'inline-block',
-                              padding: '0.15rem 0.5rem',
-                              background: 'var(--primary-light)',
-                              color: 'var(--primary)',
-                              borderRadius: 4,
-                              fontSize: '0.75rem',
-                              fontWeight: 600,
-                            }}
-                          >
-                            {catData.count}
-                          </span>
-                        </td>
-                        <td style={{ textAlign: 'right', fontWeight: 600 }}>
-                          HK${fmt(catData.total)}
-                        </td>
-                        <td
+              {/* Categories list */}
+              <div style={{ padding: '8px 0' }}>
+                {Object.entries(data.categories).map(([cat, catData], idx, arr) => {
+                  const pct =
+                    data.total > 0 ? (catData.total / data.total) * 100 : 0;
+                  const isLast = idx === arr.length - 1;
+
+                  return (
+                    <div
+                      key={cat}
+                      style={{
+                        padding: '12px 20px',
+                        borderBottom: isLast
+                          ? 'none'
+                          : '1px solid var(--neutral-100)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 16,
+                      }}
+                    >
+                      {/* Category name */}
+                      <div
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          fontWeight: 500,
+                          color: 'var(--neutral-800)',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                        title={cat}
+                      >
+                        {cat}
+                      </div>
+
+                      {/* PR count */}
+                      <div
+                        style={{
+                          width: 60,
+                          textAlign: 'right',
+                          fontSize: '0.8125rem',
+                          color: 'var(--neutral-500)',
+                        }}
+                      >
+                        {catData.count}{' '}
+                        <span style={{ fontSize: '0.7rem' }}>
+                          PR{catData.count !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+
+                      {/* Percentage bar */}
+                      <div
+                        style={{
+                          width: 100,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                        }}
+                        title={`${pct.toFixed(1)}% of company total`}
+                      >
+                        <div
                           style={{
-                            textAlign: 'right',
-                            color: 'var(--neutral-500)',
+                            flex: 1,
+                            height: 6,
+                            background: 'var(--neutral-100)',
+                            borderRadius: 3,
+                            overflow: 'hidden',
                           }}
                         >
-                          {pct.toFixed(1)}%
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr style={{ background: 'var(--neutral-50)' }}>
-                    <td style={{ fontWeight: 700 }}>Total · {company}</td>
-                    <td
-                      style={{
-                        textAlign: 'center',
-                        fontWeight: 700,
-                      }}
-                    >
-                      {data.count}
-                    </td>
-                    <td
-                      style={{
-                        textAlign: 'right',
-                        fontWeight: 700,
-                        color: 'var(--primary)',
-                      }}
-                    >
-                      HK${fmt(data.total)}
-                    </td>
-                    <td style={{ textAlign: 'right', fontWeight: 600 }}>
-                      100%
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
+                          <div
+                            style={{
+                              width: `${Math.min(pct, 100)}%`,
+                              height: '100%',
+                              background:
+                                'linear-gradient(90deg, #0ea5e9 0%, #1a4d8f 100%)',
+                              borderRadius: 3,
+                            }}
+                          />
+                        </div>
+                        <span
+                          style={{
+                            fontSize: '0.7rem',
+                            color: 'var(--neutral-500)',
+                            width: 32,
+                            textAlign: 'right',
+                          }}
+                        >
+                          {pct.toFixed(0)}%
+                        </span>
+                      </div>
+
+                      {/* Amount */}
+                      <div
+                        style={{
+                          width: 120,
+                          textAlign: 'right',
+                          fontWeight: 600,
+                          color: 'var(--neutral-800)',
+                          fontVariantNumeric: 'tabular-nums',
+                        }}
+                      >
+                        {fmt(catData.total)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           ))}
         </>
       )}
 
+      {/* Empty state */}
       {Object.keys(byCompany).length === 0 && (
         <div className="pro-card">
           <div className="pro-card-body empty-state">
