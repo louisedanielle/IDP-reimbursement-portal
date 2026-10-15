@@ -33,7 +33,7 @@ function App() {
               justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 14,
             }}>IDP</div>
             <div>
-              <div style={{ lineHeight: 1.2 }}>Reimbursement Portal</div>
+              <div style={{ lineHeight: 1.2 }}>Requisition Portal</div>
               <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 400 }}>
                 Intelligent Document Processing
               </div>
