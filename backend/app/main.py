@@ -1177,6 +1177,136 @@ async def get_requisition(req_id: UUID, db: Session = Depends(get_db)):
         ],
     }
 
+@app.put("/api/requisitions/{req_id}")
+async def update_requisition(
+    req_id: UUID,
+    data: dict,
+    db: Session = Depends(get_db),
+):
+    """
+    Fully update a requisition. Any of these fields may be included in the body:
+
+      {
+        "pr_number": "LSI-PR-2026-005",
+        "company_id": "<uuid>",
+        "payment_category_id": "<uuid>",
+        "payee_name": "Gu Bai Chuan Cole",
+        "period": "2026-07",
+        "line_items": [
+            {"date": "2026-07-15", "description": "...", "amount_hkd": 100.00, "category": "Hotel"},
+            ...
+        ]
+      }
+
+    Unspecified fields are left unchanged.
+    """
+    req = db.query(Requisition).filter(Requisition.id == req_id).first()
+    if not req:
+        raise HTTPException(404, "Requisition not found")
+
+    # ---------------- PR number ----------------
+    if "pr_number" in data:
+        new_pr = (data.get("pr_number") or "").strip()
+        if not new_pr:
+            raise HTTPException(400, "pr_number cannot be empty")
+        if new_pr != req.pr_number:
+            clash = (
+                db.query(Requisition)
+                .filter(Requisition.pr_number == new_pr, Requisition.id != req.id)
+                .first()
+            )
+            if clash:
+                raise HTTPException(400, f"PR number '{new_pr}' already exists")
+            req.pr_number = new_pr
+
+    # ---------------- Company + Category ----------------
+    new_company_id = _to_uuid(data.get("company_id"))
+    new_category_id = _to_uuid(data.get("payment_category_id"))
+
+    if new_company_id:
+        new_company = db.query(Company).filter(Company.id == new_company_id).first()
+        if not new_company:
+            raise HTTPException(404, "Company not found")
+        req.company_id = new_company.id
+        req.company_name = new_company.name
+
+    if new_category_id:
+        new_category = (
+            db.query(PaymentCategory)
+            .filter(PaymentCategory.id == new_category_id)
+            .first()
+        )
+        if not new_category:
+            raise HTTPException(404, "Payment category not found")
+        req.payment_category_id = new_category.id
+        req.category_name = new_category.name
+        req.payment_type_name = new_category.payment_type.name
+        req.frequency = new_category.frequency
+
+    # ---------------- Payee ----------------
+    if "payee_name" in data:
+        new_payee_name = (data.get("payee_name") or "").strip()
+        if not new_payee_name:
+            raise HTTPException(400, "payee_name cannot be empty")
+        payee = db.query(Payee).filter(Payee.name == new_payee_name).first()
+        if not payee:
+            payee = Payee(name=new_payee_name, payee_type="other")
+            db.add(payee)
+            db.flush()
+        req.payee_id = payee.id
+        req.payee_name = new_payee_name
+
+    # ---------------- Period ----------------
+    if "period" in data:
+        req.period = _normalize_period(data.get("period"))
+
+    # ---------------- Line items ----------------
+    if "line_items" in data and data["line_items"] is not None:
+        line_items = data["line_items"]
+
+        # Delete existing line items
+        db.query(LineItem).filter(LineItem.requisition_id == req.id).delete()
+        db.flush()
+
+        # Add new ones
+        for idx, item in enumerate(line_items):
+            amount = float(item.get("amount_hkd", 0) or 0)
+            line_item = LineItem(
+                requisition_id=req.id,
+                source_document_id=item.get("source_document_id") or None,
+                item_number=idx + 1,
+                date=_parse_date(item.get("date")),
+                description=item.get("description", "") or "",
+                amount_hkd=amount,
+                category=item.get("category") or None,
+            )
+            db.add(line_item)
+
+        db.flush()
+
+        # Recompute total = sum of line items
+        all_items = (
+            db.query(LineItem)
+            .filter(LineItem.requisition_id == req.id)
+            .all()
+        )
+        req.total_amount = sum(li.amount_hkd for li in all_items)
+
+    db.commit()
+    db.refresh(req)
+
+    # Regenerate the Word document with the new values
+    try:
+        _regenerate_word(db, req)
+    except Exception as e:
+        print(f"⚠️ Word regeneration failed: {e}")
+
+    return {
+        "message": "Requisition updated",
+        "id": str(req.id),
+        "pr_number": req.pr_number,
+        "total_amount": req.total_amount,
+    }
 
 @app.delete("/api/requisitions/{req_id}")
 async def delete_requisition(req_id: UUID, db: Session = Depends(get_db)):

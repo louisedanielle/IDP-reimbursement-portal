@@ -125,6 +125,11 @@ export const downloadAllCompaniesAnnualReport = (year) => {
   window.open(url, '_blank');
 };
 
+export const updateRequisition = async (id, payload) => {
+  const { data } = await api.put(`/api/requisitions/${id}`, payload);
+  return data;
+};
+
 export const API_BASE_URL = API_URL;
 
 export default api;
