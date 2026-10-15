@@ -1,4 +1,4 @@
-# Reimbursement IDP System
+# IDP Requisition System
 
 An intelligent document processing platform for automating reimbursement and payment requisitions. Upload receipts, invoices, cheques, or any financial document — the system extracts line items using AI, lets you review them, and generates a formatted Word Payment Requisition.
 
