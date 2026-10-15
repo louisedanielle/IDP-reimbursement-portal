@@ -1,135 +1,68 @@
-import axios from 'axios';
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { Navbar, Nav, Container } from 'react-bootstrap';
+import { FiHome, FiUploadCloud, FiFolder, FiEdit3 } from 'react-icons/fi';
+import Dashboard from './pages/Dashboard';
+import Upload from './pages/Upload';
+import Review from './pages/Review';
+import Requisitions from './pages/Requisitions';
+import RequisitionDetail from './pages/RequisitionDetail';
+import ManualInput from './pages/ManualInput';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+function NavLink({ to, icon, children }) {
+  const location = useLocation();
+  const isActive = location.pathname === to;
+  return (
+    <Nav.Link as={Link} to={to} className={isActive ? 'active' : ''}
+      style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      {icon}<span>{children}</span>
+    </Nav.Link>
+  );
+}
 
-const api = axios.create({
-  baseURL: API_URL,
-  headers: { 'Content-Type': 'application/json' },
-});
+function App() {
+  return (
+    <Router>
+      <Navbar expand="lg" className="app-navbar" sticky="top">
+        <Container className="main-container" style={{ padding: '0 1.5rem' }}>
+          <Navbar.Brand as={Link} to="/">
+            <div style={{
+              width: 32, height: 32,
+              background: 'linear-gradient(135deg,#1a4d8f,#0ea5e9)',
+              borderRadius: 6, display: 'flex', alignItems: 'center',
+              justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 14,
+            }}>IDP</div>
+            <div>
+              <div style={{ lineHeight: 1.2 }}>Requisition Portal</div>
+              <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 400 }}>
+                Intelligent Document Processing
+              </div>
+            </div>
+          </Navbar.Brand>
+          <Navbar.Toggle />
+          <Navbar.Collapse>
+            <Nav className="ms-auto">
+              <NavLink to="/" icon={<FiHome size={16}/>}>Dashboard</NavLink>
+              <NavLink to="/upload" icon={<FiUploadCloud size={16}/>}>Upload</NavLink>
+              <NavLink to="/manual" icon={<FiEdit3 size={16} />}>Manual Input</NavLink>
+              <NavLink to="/requisitions" icon={<FiFolder size={16}/>}>Requisitions</NavLink>
+            </Nav>
+          </Navbar.Collapse>
+        </Container>
+      </Navbar>
 
-// ---------- Lookups ----------
-export const getCategories = async () => {
-  const { data } = await api.get('/api/categories');
-  return data.categories;
-};
+      <div className="main-container">
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/upload" element={<Upload />} />
+          <Route path="/manual" element={<ManualInput />} />
+          <Route path="/review" element={<Review />} />
+          <Route path="/requisitions" element={<Requisitions />} />
+          <Route path="/requisitions/:id" element={<RequisitionDetail />} />
+        </Routes>
+      </div>
+    </Router>
+  );
+}
 
-export const getCompanies = async () => {
-  const { data } = await api.get('/api/companies');
-  return data;
-};
-
-export const getCompanyCategories = async (companyId) => {
-  const { data } = await api.get(`/api/companies/${companyId}/categories`);
-  return data;
-};
-
-export const createNature = async (companyId, name, paymentType) => {
-  const { data } = await api.post(`/api/companies/${companyId}/categories`, {
-    name,
-    payment_type: paymentType,
-  });
-  return data;
-};
-
-export const getPayees = async () => {
-  const { data } = await api.get('/api/payees');
-  return data;
-};
-
-export const createPayee = async (name) => {
-  const { data } = await api.post('/api/payees', { name });
-  return data;
-};
-
-// ---------- Documents ----------
-export const uploadDocument = async (file) => {
-  const formData = new FormData();
-  formData.append('file', file);
-  const { data } = await api.post('/api/documents/upload', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
-  return data;
-};
-
-export const createManualDocument = async () => {
-  const { data } = await api.post('/api/documents/manual');
-  return data;
-};
-
-export const listDocuments = async () => {
-  const { data } = await api.get('/api/documents');
-  return data;
-};
-
-export const getDocumentStatus = async (docId) => {
-  const { data } = await api.get(`/api/documents/${docId}/status`);
-  return data;
-};
-
-export const getExtractedData = async (docId) => {
-  const { data } = await api.get(`/api/documents/${docId}/extracted`);
-  return data;
-};
-
-export const getSuggestions = async (docId) => {
-  const { data } = await api.get(`/api/documents/${docId}/suggestions`);
-  return data;
-};
-
-export const saveReview = async (docId, payload) => {
-  const { data } = await api.post(`/api/documents/${docId}/review`, payload);
-  return data;
-};
-
-export const reprocessDocument = async (docId) => {
-  const { data } = await api.post(`/api/documents/${docId}/reprocess`);
-  return data;
-};
-
-// ---------- Dashboard ----------
-export const getDashboardStats = async () => {
-  const { data } = await api.get('/api/dashboard/stats');
-  return data;
-};
-
-// ---------- Requisitions ----------
-export const listRequisitions = async (params = {}) => {
-  const { data } = await api.get('/api/requisitions', { params });
-  return data;
-};
-
-export const getFolderView = async (params = {}) => {
-  const { data } = await api.get('/api/requisitions/folders', { params });
-  return data;
-};
-
-export const getRequisition = async (id) => {
-  const { data } = await api.get(`/api/requisitions/${id}`);
-  return data;
-};
-
-export const updateRequisition = async (id, payload) => {
-  const { data } = await api.put(`/api/requisitions/${id}`, payload);
-  return data;
-};
-
-export const deleteRequisition = async (id) => {
-  const { data } = await api.delete(`/api/requisitions/${id}`);
-  return data;
-};
-
-// ---------- Annual Reports (Excel) ----------
-export const downloadCompanyAnnualReport = (companyId, year) => {
-  const url = `${API_URL}/api/companies/${companyId}/annual-report?year=${year}`;
-  window.open(url, '_blank');
-};
-
-export const downloadAllCompaniesAnnualReport = (year) => {
-  const url = `${API_URL}/api/dashboard/annual-report?year=${year}`;
-  window.open(url, '_blank');
-};
-
-// ---------- Shared base URL ----------
-export const API_BASE_URL = API_URL;
-
-export default api;
+export default App;

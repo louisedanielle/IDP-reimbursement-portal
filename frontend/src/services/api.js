@@ -5,7 +5,6 @@ const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 const api = axios.create({
   baseURL: API_URL,
   headers: { 'Content-Type': 'application/json' },
-  timeout: 120000,   
 });
 
 // ---------- Lookups ----------
@@ -21,7 +20,7 @@ export const getCompanies = async () => {
 
 export const getCompanyCategories = async (companyId) => {
   const { data } = await api.get(`/api/companies/${companyId}/categories`);
-  return data;   // { "Monthly Payment": [...], ... }
+  return data;
 };
 
 export const createNature = async (companyId, name, paymentType) => {
@@ -52,6 +51,11 @@ export const uploadDocument = async (file) => {
   return data;
 };
 
+export const createManualDocument = async () => {
+  const { data } = await api.post('/api/documents/manual');
+  return data;
+};
+
 export const listDocuments = async () => {
   const { data } = await api.get('/api/documents');
   return data;
@@ -73,7 +77,6 @@ export const getSuggestions = async (docId) => {
 };
 
 export const saveReview = async (docId, payload) => {
-  // payload = { items, company_id, payment_category_id, payee_name, period }
   const { data } = await api.post(`/api/documents/${docId}/review`, payload);
   return data;
 };
@@ -105,31 +108,28 @@ export const getRequisition = async (id) => {
   return data;
 };
 
-export const deleteRequisition = async (id) => {
-  const { data } = await api.delete(`/api/requisitions/${id}`);
-  return data;
-};
-
-export const createManualDocument = async () => {
-  const { data } = await api.post('/api/documents/manual');
-  return data;
-};
-
-export const downloadCompanyAnnualReport = (companyId, year) => {
-  const url = `${API_BASE_URL}/api/companies/${companyId}/annual-report?year=${year}`;
-  window.open(url, '_blank');
-};
-
-export const downloadAllCompaniesAnnualReport = (year) => {
-  const url = `${API_BASE_URL}/api/dashboard/annual-report?year=${year}`;
-  window.open(url, '_blank');
-};
-
 export const updateRequisition = async (id, payload) => {
   const { data } = await api.put(`/api/requisitions/${id}`, payload);
   return data;
 };
 
+export const deleteRequisition = async (id) => {
+  const { data } = await api.delete(`/api/requisitions/${id}`);
+  return data;
+};
+
+// ---------- Annual Reports (Excel) ----------
+export const downloadCompanyAnnualReport = (companyId, year) => {
+  const url = `${API_URL}/api/companies/${companyId}/annual-report?year=${year}`;
+  window.open(url, '_blank');
+};
+
+export const downloadAllCompaniesAnnualReport = (year) => {
+  const url = `${API_URL}/api/dashboard/annual-report?year=${year}`;
+  window.open(url, '_blank');
+};
+
+// ---------- Shared base URL ----------
 export const API_BASE_URL = API_URL;
 
 export default api;
