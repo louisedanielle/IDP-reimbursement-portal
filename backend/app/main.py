@@ -2,6 +2,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from datetime import datetime
 from uuid import UUID
 import os
@@ -525,28 +526,46 @@ async def save_review(
     )
 
     if requisition is None:
-        requisition = Requisition(
-            pr_number=_generate_pr_number(db),
-            company_id=company.id,
-            payment_category_id=category.id,
-            payee_id=payee.id,
-            company_name=company.name,
-            category_name=category.name,
-            payment_type_name=category.payment_type.name,
-            payee_name=payee_name,
-            period=period,
-            frequency=category.frequency,
-            applicant="Juliana",
-            nature="Payment Requisition",
-            total_amount=0.0,
-            status="draft",
-        )
-        db.add(requisition)
-        db.commit()
-        print(
-            f"✨ Created {requisition.pr_number} "
-            f"({category.name} / {payee_name} / {period or 'no period'})"
-        )
+        # Try up to 3 times in case of a PR-number collision
+        last_error = None
+        for attempt in range(3):
+            try:
+                new_pr = _generate_pr_number(db, company.short_name)
+                requisition = Requisition(
+                    pr_number=new_pr,
+                    company_id=company.id,
+                    payment_category_id=category.id,
+                    payee_id=payee.id,
+                    company_name=company.name,
+                    category_name=category.name,
+                    payment_type_name=category.payment_type.name,
+                    payee_name=payee_name,
+                    period=period,
+                    frequency=category.frequency,
+                    applicant="Juliana",
+                    nature="Payment Requisition",
+                    total_amount=0.0,
+                    status="draft",
+                )
+                db.add(requisition)
+                db.commit()
+                print(
+                    f"✨ Created {requisition.pr_number} "
+                    f"({company.name} / {category.name} / "
+                    f"{payee_name} / {period or 'no period'})"
+                )
+                break
+            except IntegrityError as e:
+                db.rollback()
+                last_error = e
+                print(f"⚠️ PR number collision on attempt {attempt + 1}, retrying...")
+                continue
+
+        if requisition is None or requisition.id is None:
+            raise HTTPException(
+                500,
+                f"Could not create requisition after 3 attempts: {last_error}",
+            )
     else:
         print(f"➕ Appending to {requisition.pr_number}")
 
@@ -1550,22 +1569,44 @@ def _regenerate_word(db: Session, req: Requisition) -> str:
     return WordGenerator().generate_requisition_docx(doc_data)
 
 
-def _generate_pr_number(db: Session) -> str:
+def _generate_pr_number(db: Session, company_short: str | None = None) -> str:
+    """
+    Generate the next PR number for a company.
+    Each company has its own sequence, format: <SHORT>-PR-YYYY-NNN.
+
+    Examples:
+      LSI-PR-2026-001
+      LSHK-PR-2026-001
+      LSH-PR-2026-001
+
+    If `company_short` is None or unknown, defaults to "LSI".
+    """
+    short = (company_short or "LSI").strip().upper()
+    # Sanitize: letters/digits only, max 6 chars
+    short = "".join(c for c in short if c.isalnum())[:6] or "LSI"
+
     year = datetime.utcnow().year
-    last = (
+    prefix = f"{short}-PR-{year}-"
+
+    # Find every requisition matching this company's prefix
+    rows = (
         db.query(Requisition)
-        .order_by(Requisition.created_date.desc())
-        .first()
+        .filter(Requisition.pr_number.like(f"{prefix}%"))
+        .all()
     )
-    next_num = 1
-    if last:
-        parts = last.pr_number.split("-")
+
+    max_num = 0
+    for r in rows:
+        parts = (r.pr_number or "").split("-")
         if len(parts) >= 4:
             try:
-                next_num = int(parts[-1]) + 1
+                n = int(parts[-1])
+                if n > max_num:
+                    max_num = n
             except ValueError:
-                next_num = 1
-    return f"LSI-PR-{year}-{next_num:03d}"
+                continue
+
+    return f"{prefix}{max_num + 1:03d}"
 
 
 def _to_uuid(value):

@@ -67,7 +67,7 @@ class WordGenerator:
         # --- Title ---
         title = doc.add_paragraph()
         title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        r = title.add_run("PAYMENT REQUISITION")
+        r = title.add_run("\nPAYMENT REQUISITION")
         r.bold = True
         r.font.size = Pt(14)
         title.paragraph_format.space_after = Pt(12)
